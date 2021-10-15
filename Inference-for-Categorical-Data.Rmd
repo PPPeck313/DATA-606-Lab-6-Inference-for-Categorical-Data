@@ -1,0 +1,111 @@
+---
+title: "DATA 606 - Lab 6 - Inference for Categorical Data"
+author: "Preston Peck"
+date: "`r Sys.Date()`"
+output: openintro::lab_report
+---
+
+# Confidence Levels
+
+<https://htmlpreview.github.io/?https://github.com/jbryer/DATA606/blob/master/inst/labs/Lab6/Lab6_inf_for_categorical_data.html>
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(openintro)
+library(infer)
+library(psych)
+```
+
+### Exercise 1
+```{r}
+yrbss %>%
+  summary
+
+yrbss %>%
+  count(text_while_driving_30d)
+```
+
+### Exercise 2
+```{r}
+getProportions <- function(data) {
+  data <- data %>%
+    count(text_ind) %>%
+    mutate(p = n / sum(n)) %>%
+    select(text_ind, n, p)
+  
+  print(data)
+  return(data)
+}
+```
+
+```{r}
+neverType = "never"
+type30 = "30"
+yesLabel = "yes"
+noLabel = "no"
+nLabel = "n"
+
+
+
+no_helmet <- yrbss %>%
+  filter(helmet_12m == neverType) %>%
+  mutate(text_ind = ifelse(!is.na(text_while_driving_30d) 
+                           & text_while_driving_30d == type30, yesLabel, noLabel))
+
+no_helmetProportions <- no_helmet %>%
+  select(text_ind) %>%
+  getProportions
+
+
+
+overall <- yrbss %>%
+  mutate(text_ind = ifelse(!is.na(text_while_driving_30d) 
+                           & text_while_driving_30d == type30 
+                           & !is.na(helmet_12m)
+                           & helmet_12m == neverType, yesLabel, noLabel)) %>%
+  select(text_ind) %>%
+  getProportions
+```
+
+### Exercise 3
+```{r}
+analyzeConfidenceInterval <- function(sample, reps = 1000, yes = TRUE, level = 0.95, print = TRUE) {
+  interval <- sample %>%
+    specify(response = text_ind, success = ifelse (yes, yesLabel, noLabel)) %>%
+    generate(reps = reps, type = "bootstrap") %>%
+    calculate(stat = "prop") %>%
+    get_ci(level = level)
+  
+  if (print) { 
+    print(interval)
+    print(c(interval$upper_ci, interval$lower_ci) %>%
+            describe)
+  }
+  
+  return(interval)
+}
+```
+
+```{r}
+analyzeMarginOfError <- function(n, p) {
+  me <- 2 * sqrt(p * (1 - p) / n)
+  print(paste("Margin of Error: ", me, sep = ""))
+  
+  pList <- seq(from = 0, to = 1, by = 0.01)
+  meList <- 2 * sqrt(pList * (1 - pList) / n)
+
+  dd <- data.frame(p = pList, me = meList)
+  print(ggplot(data = dd, aes(x = p, y = me)) +
+          geom_line() +
+          labs(x = "Population Proportion", y = "Margin of Error"))
+  
+  return(me)
+}
+```
+
+```{r}
+interval95 <- no_helmet %>%
+  analyzeConfidenceInterval
+
+me <- analyzeMarginOfError(no_helmetProportions[[2,2]], no_helmetProportions[[2,3]])
+```
