@@ -30,6 +30,7 @@ yrbss %>%
 ```{r}
 getProportions <- function(data) {
   data <- data %>%
+    select(text_ind) %>%
     count(text_ind) %>%
     mutate(p = n / sum(n)) %>%
     select(text_ind, n, p)
@@ -54,18 +55,16 @@ no_helmet <- yrbss %>%
                            & text_while_driving_30d == type30, yesLabel, noLabel))
 
 no_helmetProportions <- no_helmet %>%
-  select(text_ind) %>%
   getProportions
 
 
 
-overall <- yrbss %>%
-  mutate(text_ind = ifelse(!is.na(text_while_driving_30d) 
-                           & text_while_driving_30d == type30 
-                           & !is.na(helmet_12m)
-                           & helmet_12m == neverType, yesLabel, noLabel)) %>%
-  select(text_ind) %>%
-  getProportions
+#overall <- yrbss %>%
+#  mutate(text_ind = ifelse(!is.na(text_while_driving_30d) 
+#                           & text_while_driving_30d == type30 
+#                           & !is.na(helmet_12m)
+#                           & helmet_12m == neverType, yesLabel, noLabel)) %>%
+#  getProportions
 ```
 
 ### Exercise 3
@@ -88,18 +87,69 @@ analyzeConfidenceInterval <- function(sample, reps = 1000, yes = TRUE, level = 0
 ```
 
 ```{r}
+analyzeSamplingProportionDistribution <- function(sample, size = NULL, reps = 15000, binwidth = .01, yes = TRUE) {
+  size <- ifelse(is.null(size), nrow(sample), size)
+    
+  sizedSamples <- sample %>%
+    rep_sample_n(size = size, reps = reps, replace = TRUE) %>%
+    count(text_ind) %>%
+    mutate(p_hat = n /sum(n))
+  
+  typeLabel <- ifelse(yes, yesLabel, notLabel)
+  
+  filteredSamples <- sizedSamples %>%
+    filter(text_ind == typeLabel)
+  
+  print(ggplot(data = filteredSamples, aes(x = p_hat)) +
+    geom_histogram(binwidth = binwidth) +
+    labs(
+      x = paste("p_hat (", typeLabel, ")", sep = ""),
+      title = "Sampling distribution of p_hat",
+      subtitle = paste("Sample size = ", size, "; Number of samples = ", reps, "; Bin width = ", binwidth, sep = "")
+    ))
+  
+  print(filteredSamples)
+  print(filteredSamples$p_hat %>%
+    describe)
+  
+  print(sizedSamples$n %>%
+    sum)
+  
+  return(sizedSamples)
+}
+```
+
+```{r}
 analyzeMarginOfError <- function(n, p, decimals = 3) {
   me <- 2 * sqrt(p * (1 - p) / n)
   print(paste("Margin of Error: ", me, sep = ""))
   
-  pList <- seq(from = 0, to = 1, by = (1 / 10 ^ decimals))
+  binwidth = 1/ 10 ^ decimals
+  pList <- seq(from = 0, to = 1, by = binwidth)
   meList <- 2 * sqrt(pList * (1 - pList) / n)
 
   dd <- data.frame(proportion = pList, marginOfError = meList)
   print(ggplot(data = dd, aes(x = proportion, y = marginOfError)) +
           geom_point() +
           gghighlight(proportion == round(p, digits = decimals), label_key = marginOfError) +
-          labs(x = "Population Proportion", y = "Margin of Error"))
+          labs(x = "Population Proportion", 
+               y = "Margin of Error",
+               title = paste("Sample size = ", n, "; Proportion = ", p, "; Bin width = ", binwidth, sep = "")))
+  
+  return(me)
+}
+
+analyzeMarginOfErrorData <- function(data, row = "yes",  size = NULL, reps = 15000, binwidth = .01, yes = TRUE, distribute = TRUE) {
+  filteredData <- data %>%
+    getProportions %>%
+    filter(text_ind == row)
+    
+  me <- analyzeMarginOfError(filteredData[[2]], filteredData[[3]])
+    
+  if(distribute) {
+    proportionDistribution <- data %>%
+      analyzeSamplingProportionDistribution(size, reps, binwidth, yes)
+  }
   
   return(me)
 }
@@ -109,67 +159,207 @@ analyzeMarginOfError <- function(n, p, decimals = 3) {
 interval95 <- no_helmet %>%
   analyzeConfidenceInterval
 
-me <- analyzeMarginOfError(no_helmetProportions[[2,2]], no_helmetProportions[[2,3]])
+print(no_helmet)
+me <- no_helmet %>%
+  analyzeMarginOfErrorData(distribute = FALSE)
 ```
 
 ### Exercise 6
+The resulting distribution is unimodal and without a skew centered around the given proportion
 ```{r}
 numOfElements = 300
 proportion = .1
 
+data = tibble(
+  text_ind = c(rep(yesLabel, numOfElements * proportion), rep(noLabel, numOfElements * (1 - proportion)))
+)
 
 
-me <- analyzeMarginOfError(numOfElements, proportion)
+
+me <- data %>%
+  analyzeMarginOfErrorData
 ```
 
 ### Exercise 7
+The shape and center remains fairly consistent as unimodal and without a skew centered around the given proportion, but the margin of error increases starting from 0 at 0% proportion until it reaches 50% where it achieves its max before decreasing back down to 0 at 100%
 ```{r}
+minisculeProportion = .01
 tinyProportion = .2
-smallProportion = .4
-mediumProportion = .6
-largeProportion = .8
-massiveProportion = 1
+smallProportion = .40
+mediumProportion = .60
+largeProportion = .80
+massiveProportion = .99
+
+smallBinwidth = .001
+
+minisculeData = tibble(
+  text_ind = c(rep(yesLabel, numOfElements * minisculeProportion), rep(noLabel, numOfElements * (1 - minisculeProportion)))
+)
+
+tinyData = tibble(
+  text_ind = c(rep(yesLabel, numOfElements * tinyProportion), rep(noLabel, numOfElements * (1 - tinyProportion)))
+)
+  
+smallData = tibble(
+  text_ind = c(rep(yesLabel, numOfElements * smallProportion), rep(noLabel, numOfElements * (1 - smallProportion)))
+)
+
+mediumData = tibble(
+  text_ind = c(rep(yesLabel, numOfElements * mediumProportion), rep(noLabel, numOfElements * (1 - mediumProportion)))
+)
+
+largeData = tibble(
+  text_ind = c(rep(yesLabel, numOfElements * largeProportion), rep(noLabel, numOfElements * (1 - largeProportion)))
+)
+
+massiveData = tibble(
+  text_ind = c(rep(yesLabel, numOfElements * massiveProportion), rep(noLabel, numOfElements * (1 - massiveProportion)))
+)
 
 
 
-me <- analyzeMarginOfError(numOfElements, tinyProportion)
-me <- analyzeMarginOfError(numOfElements, smallProportion)
-me <- analyzeMarginOfError(numOfElements, mediumProportion)
-me <- analyzeMarginOfError(numOfElements, largeProportion)
-me <- analyzeMarginOfError(numOfElements, massiveProportion)
+me <- minisculeData %>%
+  analyzeMarginOfErrorData(binwidth = smallBinwidth)
+
+me <- tinyData %>%
+  analyzeMarginOfErrorData
+
+me <- smallData %>%
+  analyzeMarginOfErrorData
+
+me <- mediumData %>%
+  analyzeMarginOfErrorData
+
+me <- largeData %>%
+  analyzeMarginOfErrorData
+
+me <- massiveData %>%
+  analyzeMarginOfErrorData(binwidth = smallBinwidth)
 ```
 
 ### Exercise 8
+The margin of error decreases as n increases
 ```{r}
-tinyNumOfElements = 1
-smallNumOfElements = 10
+tinyNumOfElements = 10
+smallNumOfElements = 50
 mediumNumOfElements = 100
 largeNumOfElements = 1000
 massiveNumOfElements = 10000
 
-me <- analyzeMarginOfError(tinyNumOfElements, proportion)
-me <- analyzeMarginOfError(smallNumOfElements, proportion)
-me <- analyzeMarginOfError(mediumNumOfElements, proportion)
-me <- analyzeMarginOfError(largeNumOfElements, proportion)
-me <- analyzeMarginOfError(massiveNumOfElements, proportion)
+largeBinwidth = .1
+mediumBinwidth = .02
+
+tinyData = tibble(
+  text_ind = c(rep(yesLabel, tinyNumOfElements * proportion), rep(noLabel, tinyNumOfElements * (1 - proportion)))
+)
+  
+smallData = tibble(
+  text_ind = c(rep(yesLabel, smallNumOfElements * proportion), rep(noLabel, smallNumOfElements * (1 - proportion)))
+)
+
+mediumData = tibble(
+  text_ind = c(rep(yesLabel, mediumNumOfElements * proportion), rep(noLabel, mediumNumOfElements * (1 - proportion)))
+)
+
+largeData = tibble(
+  text_ind = c(rep(yesLabel, largeNumOfElements * proportion), rep(noLabel, largeNumOfElements * (1 - proportion)))
+)
+
+massiveData = tibble(
+  text_ind = c(rep(yesLabel, massiveNumOfElements * proportion), rep(noLabel, massiveNumOfElements * (1 - proportion)))
+)
+
+
+
+me <- tinyData %>%
+  analyzeMarginOfErrorData(binwidth = largeBinwidth)
+
+me <- smallData %>%
+  analyzeMarginOfErrorData(binwidth = mediumBinwidth)
+
+me <- mediumData %>%
+  analyzeMarginOfErrorData
+
+me <- largeData %>%
+  analyzeMarginOfErrorData(binwidth = smallBinwidth)
+
+me <- massiveData %>%
+  analyzeMarginOfErrorData(binwidth = smallBinwidth)
 ```
 
 ### Exercise 9
+Of those that sleep more than 10 hours, we can say with 95% confidence that about 27% of them work out every day. This is a significant relationship given that the only other prevalent pattern observed is 0 days at 31%.
+
+Ho: Those who sleep 10+ hours per day are NOT more likely to strength train every day of the week
+Ha: Those who sleep 10+ hours per day are more likely to strength train every day of the week
 ```{r}
 type7 = "7"
+type10Plus <- "10+"
+binwidth = .0003
 
 
 
-exercise <- yrbss %>%
-  mutate(exercise_everyday = ifelse(!is.na(strength_training_7d)
-                                    & strength_training_7d == type7, yesLabel, noLabel))
+#exerciseEveryday <- yrbss %>%
+#  mutate(text_ind = ifelse(!is.na(strength_training_7d)
+#                           & strength_training_7d == type7, yesLabel, noLabel))
+#
+#exerciseEverydayMarginOfError <- exerciseEveryday %>%
+#  analyzeMarginOfErrorData(binwidth = binwidth)
+#
+#exerciseEverydayConfidenceInerval <- exerciseEveryday %>%
+#  analyzeConfidenceInterval
+
+
+
+
+#sleep10OrMoreHours <- yrbss %>%
+#  mutate(text_ind = ifelse(!is.na(school_night_hours_sleep)
+#                           & school_night_hours_sleep == type10Plus, yesLabel, noLabel))
+#
+#sleep10OrMoreHoursMarginOfError <- sleep10OrMoreHours %>%
+#  analyzeMarginOfErrorData(binwidth = binwidth)
+#
+#sleep10OrMoreHoursConfidenceInerval <- sleep10OrMoreHours %>%
+#  analyzeConfidenceInterval
+
+
+
+exerciseEverydayAndSleep10OrMoreHours <- yrbss %>%
+  filter(strength_training_7d == type7) %>%
+  mutate(text_ind = ifelse(!is.na(school_night_hours_sleep)
+                           & school_night_hours_sleep == type10Plus, yesLabel, noLabel))
+
+exerciseEverydayAndSleep10OrMoreHoursMarginOfError <- exerciseEverydayAndSleep10OrMoreHours %>%
+  analyzeMarginOfErrorData(binwidth = smallBinwidth)
+
+exerciseEverydayAndSleep10OrMoreHoursConfidenceInerval <- exerciseEverydayAndSleep10OrMoreHours %>%
+  analyzeConfidenceInterval
+
+
+
+sleep10OrMoreHoursAndExerciseEveryday <- yrbss %>%
+  filter(school_night_hours_sleep == type10Plus) %>%
+  mutate(text_ind = ifelse(!is.na(strength_training_7d)
+                           & strength_training_7d == type7, yesLabel, noLabel))
+
+sleep10OrMoreHoursAndExerciseEverydayMarginOfError <- sleep10OrMoreHoursAndExerciseEveryday %>%
+  analyzeMarginOfErrorData
+
+sleep10OrMoreHoursAndExerciseEverydayConfidenceInerval <- sleep10OrMoreHoursAndExerciseEveryday %>%
+  analyzeConfidenceInterval
+
+sleep10OrMoreHoursAndExerciseEveryday %>%
+    select(strength_training_7d) %>%
+    count(strength_training_7d) %>%
+    mutate(p = n / sum(n)) %>%
+    select(strength_training_7d, n, p)
 ```
 
 ### Exercise 10
-```{r}
-type10Plus <- "10+"
+The null hypothesis is rejected when the p value is less than or equal to the significance level, which in this case is .05, or 5%. It represents how often we might mistakenly accept the null hypothesis in this scenario
 
-sleep_time <- yrbss %>%
-  mutate(sleep_everyday = ifelse(!is.na(school_night_hours_sleep)
-                                 & school_night_hours_sleep == type10Plus, yesLabel, noLabel))
+### Exercise 11
+Using a proportion of 50% to get the highest possible sample size and a margin of error of 1%, our ideal sample size would be 9604
+```{r}
+((1.96 ^ 2) * (0.5 * 0.5)) / 0.01 ^ 2 
 ```
