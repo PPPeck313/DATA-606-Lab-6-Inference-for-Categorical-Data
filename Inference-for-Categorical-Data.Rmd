@@ -156,13 +156,34 @@ analyzeMarginOfErrorData <- function(data, row = "yes",  size = NULL, reps = 150
 ```
 
 ```{r}
-interval95 <- no_helmet %>%
-  analyzeConfidenceInterval
-
-print(no_helmet)
 me <- no_helmet %>%
   analyzeMarginOfErrorData(distribute = FALSE)
+
+interval95 <- no_helmet %>%
+  analyzeConfidenceInterval
 ```
+
+### Exercise 4
+```{r}
+doNotWatchType = "do not watch"
+type7 = "7"
+
+
+
+noTVWorkoutEveryDay <- yrbss %>%
+  filter(hours_tv_per_school_day == doNotWatchType) %>%
+  mutate(text_ind = ifelse(!is.na(strength_training_7d) 
+                           & strength_training_7d == type7, yesLabel, noLabel))
+
+me <- noTVWorkoutEveryDay %>%
+  analyzeMarginOfErrorData(distribute = FALSE)
+
+interval95 <- noTVWorkoutEveryDay %>%
+  analyzeConfidenceInterval
+```
+
+### Exercise 5
+the margin of error increases starting from 0 at 0% proportion until it reaches 50% where it achieves its max before decreasing back down to 0 at 100%
 
 ### Exercise 6
 The resulting distribution is unimodal and without a skew centered around the given proportion
@@ -293,7 +314,6 @@ Of those that sleep more than 10 hours, we can say with 95% confidence that abou
 Ho: Those who sleep 10+ hours per day are NOT more likely to strength train every day of the week
 Ha: Those who sleep 10+ hours per day are more likely to strength train every day of the week
 ```{r}
-type7 = "7"
 type10Plus <- "10+"
 binwidth = .0003
 
